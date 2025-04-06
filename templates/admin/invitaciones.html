@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Gestión de Invitaciones</h1>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Volver al Dashboard</a>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Invitaciones a Eventos</h2>
+        </div>
+        <div class="card-body">
+            {% if invitaciones %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Evento</th>
+                            <th>Invitado</th>
+                            <th>Email</th>
+                            <th>Estado</th>
+                            <th>Fecha de Respuesta</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for invitacion in invitaciones %}
+                        <tr>
+                            <td>{{ invitacion.evento.titulo }}</td>
+                            <td>{{ invitacion.invitado.nombre if invitacion.invitado else 'No registrado' }}</td>
+                            <td>{{ invitacion.email_invitado }}</td>
+                            <td>
+                                <span class="badge {% if invitacion.estado == 'aceptado' %}bg-success{% elif invitacion.estado == 'rechazado' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {{ invitacion.estado|title }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if invitacion.fecha_respuesta %}
+                                {{ invitacion.fecha_respuesta.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                Pendiente
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                No hay invitaciones para mostrar.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

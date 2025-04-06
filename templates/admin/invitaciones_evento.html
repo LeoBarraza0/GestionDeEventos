@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Gestión de Invitaciones - {{ evento.titulo }}</h1>
+        <div>
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary me-2">Volver al Dashboard</a>
+            <a href="{{ url_for('invitar', evento_id=evento.id) }}" class="btn btn-primary">Invitar Nuevo Usuario</a>
+        </div>
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Detalles del Evento</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Descripción:</strong> {{ evento.descripcion }}</p>
+                    <p><strong>Fecha:</strong> {{ evento.fecha.strftime('%d/%m/%Y %H:%M') }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p><strong>Ubicación:</strong> {{ evento.ubicacion }}</p>
+                    <p><strong>Organizador:</strong> {{ evento.organizador.nombre }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Invitaciones</h5>
+        </div>
+        <div class="card-body">
+            {% if invitaciones %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Invitado</th>
+                            <th>Email</th>
+                            <th>Estado</th>
+                            <th>Fecha de Respuesta</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for invitacion in invitaciones %}
+                        <tr>
+                            <td>{{ invitacion.invitado.nombre if invitacion.invitado else 'No registrado' }}</td>
+                            <td>{{ invitacion.email }}</td>
+                            <td>
+                                <span class="badge {% if invitacion.estado == 'aceptado' %}bg-success{% elif invitacion.estado == 'rechazado' %}bg-danger{% else %}bg-warning{% endif %}">
+                                    {{ invitacion.estado|title }}
+                                </span>
+                            </td>
+                            <td>
+                                {% if invitacion.fecha_respuesta %}
+                                {{ invitacion.fecha_respuesta.strftime('%d/%m/%Y %H:%M') }}
+                                {% else %}
+                                Pendiente
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if invitacion.estado == 'pendiente' %}
+                                <form action="{{ url_for('responder_invitacion', invitacion_id=invitacion.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="respuesta" value="aceptado">
+                                    <button type="submit" class="btn btn-success btn-sm">Aceptar</button>
+                                </form>
+                                <form action="{{ url_for('responder_invitacion', invitacion_id=invitacion.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="respuesta" value="rechazado">
+                                    <button type="submit" class="btn btn-danger btn-sm">Rechazar</button>
+                                </form>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                No hay invitaciones para este evento.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

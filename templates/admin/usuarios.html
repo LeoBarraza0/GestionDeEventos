@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>Gestión de Usuarios</h1>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-outline-secondary">Volver al Dashboard</a>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <h2>Lista de Usuarios</h2>
+        </div>
+        <div class="card-body">
+            {% if usuarios %}
+            <div class="table-responsive">
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th>Nombre</th>
+                            <th>Email</th>
+                            <th>Rol</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for usuario in usuarios %}
+                        <tr>
+                            <td>{{ usuario.nombre }}</td>
+                            <td>{{ usuario.email }}</td>
+                            <td>
+                                <span class="badge {% if usuario.es_admin %}bg-danger{% else %}bg-primary{% endif %}">
+                                    {% if usuario.es_admin %}Administrador{% else %}Usuario{% endif %}
+                                </span>
+                            </td>
+                            <td>
+                                {% if usuario.id != current_user.id %}
+                                <form action="{{ url_for('toggle_admin', usuario_id=usuario.id) }}" method="POST" class="d-inline">
+                                    <button type="submit" class="btn btn-sm {% if usuario.es_admin %}btn-warning{% else %}btn-success{% endif %}">
+                                        {% if usuario.es_admin %}Quitar Admin{% else %}Hacer Admin{% endif %}
+                                    </button>
+                                </form>
+                                {% else %}
+                                <span class="text-muted">Tu cuenta</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="alert alert-info">
+                No hay usuarios registrados.
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %} 

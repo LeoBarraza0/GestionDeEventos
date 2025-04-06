@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1><i class="bi bi-calendar-event me-2"></i>EventFlow Dashboard</h1>
+    {% if current_user.es_admin %}
+    <div>
+        <a href="{{ url_for('nuevo_evento') }}" class="btn btn-primary me-2">
+            <i class="bi bi-plus-circle me-1"></i>Crear Nuevo Evento
+        </a>
+        <a href="{{ url_for('gestionar_invitaciones') }}" class="btn btn-info me-2">
+            <i class="bi bi-envelope me-1"></i>Gestionar Invitaciones
+        </a>
+        <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-warning">
+            <i class="bi bi-people me-1"></i>Gestionar Usuarios
+        </a>
+    </div>
+    {% else %}
+    <div>
+        <a href="{{ url_for('nuevo_evento') }}" class="btn btn-primary">
+            <i class="bi bi-plus-circle me-1"></i>Crear Nuevo Evento
+        </a>
+    </div>
+    {% endif %}
+</div>
+
+<div class="row">
+    {% if current_user.es_admin %}
+    <div class="col-md-8">
+        <h2 class="mb-4"><i class="bi bi-calendar3 me-2"></i>Mis Eventos</h2>
+        {% if eventos %}
+        <div class="row">
+            {% for evento in eventos %}
+            <div class="col-md-6 mb-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h5 class="card-title">{{ evento.titulo }}</h5>
+                        <p class="card-text text-muted">{{ evento.descripcion[:100] }}{% if evento.descripcion|length > 100 %}...{% endif %}</p>
+                        <ul class="list-unstyled">
+                            <li><i class="bi bi-calendar-event me-2"></i><strong>Fecha:</strong> {{ evento.fecha.strftime('%d/%m/%Y %H:%M') }}</li>
+                            <li><i class="bi bi-geo-alt me-2"></i><strong>Ubicación:</strong> {{ evento.ubicacion }}</li>
+                        </ul>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#evento{{ evento.id }}">
+                                <i class="bi bi-chevron-down me-1"></i>Ver más
+                            </button>
+                            <a href="{{ url_for('gestionar_invitaciones_evento', evento_id=evento.id) }}" class="btn btn-primary">
+                                <i class="bi bi-envelope me-1"></i>Gestionar Invitaciones
+                            </a>
+                        </div>
+                        <div class="collapse mt-3" id="evento{{ evento.id }}">
+                            <div class="card card-body bg-light">
+                                <h6 class="mb-3">Detalles completos del evento</h6>
+                                <p class="mb-2"><strong>Descripción completa:</strong></p>
+                                <p class="mb-3">{{ evento.descripcion }}</p>
+                                <p class="mb-2"><strong>Organizador:</strong> {{ evento.organizador.nombre }}</p>
+                                <p class="mb-0"><strong>Fecha del evento:</strong> {{ evento.fecha.strftime('%d/%m/%Y %H:%M') }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>No tienes eventos creados todavía. 
+            <a href="{{ url_for('nuevo_evento') }}" class="alert-link">¡Crea tu primer evento!</a>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="col-md-{% if current_user.es_admin %}4{% else %}12{% endif %}">
+        <h2 class="mb-4"><i class="bi bi-envelope me-2"></i>Invitaciones Pendientes</h2>
+        {% if invitaciones %}
+        <div class="list-group">
+            {% for invitacion in invitaciones %}
+            <div class="list-group-item list-group-item-action">
+                <div class="d-flex w-100 justify-content-between">
+                    <h5 class="mb-1">{{ invitacion.evento.titulo }}</h5>
+                    <small class="text-muted">{{ invitacion.evento.fecha.strftime('%d/%m/%Y') }}</small>
+                </div>
+                <p class="mb-1"><i class="bi bi-person me-2"></i>Organizado por: {{ invitacion.evento.organizador.nombre }}</p>
+                <small><i class="bi bi-clock me-2"></i>Fecha: {{ invitacion.evento.fecha.strftime('%H:%M') }}</small>
+                {% if invitacion.estado == 'pendiente' %}
+                <div class="mt-2">
+                    <form action="{{ url_for('responder_invitacion', invitacion_id=invitacion.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="respuesta" value="aceptado">
+                        <button type="submit" class="btn btn-success btn-sm">
+                            <i class="bi bi-check-circle me-1"></i>Aceptar
+                        </button>
+                    </form>
+                    <form action="{{ url_for('responder_invitacion', invitacion_id=invitacion.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="respuesta" value="rechazado">
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            <i class="bi bi-x-circle me-1"></i>Rechazar
+                        </button>
+                    </form>
+                </div>
+                {% else %}
+                <div class="mt-2">
+                    <span class="badge {% if invitacion.estado == 'aceptado' %}bg-success{% else %}bg-danger{% endif %}">
+                        <i class="bi {% if invitacion.estado == 'aceptado' %}bi-check-circle{% else %}bi-x-circle{% endif %} me-1"></i>
+                        {{ invitacion.estado|title }}
+                    </span>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>No tienes invitaciones pendientes.
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

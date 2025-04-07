@@ -3,15 +3,42 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
+from flask_wtf.csrf import CSRFProtect
 import os
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.urandom(24)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///eventos.db'
+app.config['WTF_CSRF_ENABLED'] = True
+
 db = SQLAlchemy(app)
+csrf = CSRFProtect(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
+
+@app.errorhandler(400)
+def bad_request(e):
+    return 'Bad Request', 400
+
+@app.errorhandler(401)
+def unauthorized(e):
+    flash('Iniciar Sesion')
+    return redirect(url_for('login'))
+
+@app.errorhandler(403)
+def forbidden(e):
+    if not current_user.is_authenticated:
+        flash('Iniciar Sesion')
+        return redirect(url_for('login'))
+    flash('No tienes permiso')
+    return redirect(url_for('dashboard'))
+
+@app.before_request
+def check_auth():
+    if not current_user.is_authenticated and request.endpoint not in ['login', 'registro', 'index', 'static']:
+        flash('Iniciar Sesion')
+        return redirect(url_for('login'))
 
 # Modelos
 class Usuario(UserMixin, db.Model):
@@ -38,6 +65,7 @@ class Evento(db.Model):
     ubicacion = db.Column(db.String(200), nullable=False)
     organizador_id = db.Column(db.Integer, db.ForeignKey('usuario.id'), nullable=False)
     fecha_creacion = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    estado = db.Column(db.String(20), nullable=False, default='activo')
     invitaciones = db.relationship('Invitacion', backref='evento', lazy=True)
 
 class Invitacion(db.Model):
@@ -55,8 +83,11 @@ def load_user(user_id):
 # Decorador para verificar si el usuario es administrador
 def admin_required(f):
     def decorated_function(*args, **kwargs):
-        if not current_user.is_authenticated or not current_user.es_admin:
-            flash('Acceso denegado. Se requieren privilegios de administrador.')
+        if not current_user.is_authenticated:
+            flash('Iniciar Sesion')
+            return redirect(url_for('login'))
+        if not current_user.es_admin:
+            flash('No tienes permiso')
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     decorated_function.__name__ = f.__name__
@@ -106,6 +137,7 @@ def login():
 @login_required
 def logout():
     logout_user()
+    flash('Iniciar Sesion')
     return redirect(url_for('index'))
 
 @app.route('/dashboard')
@@ -125,23 +157,33 @@ def dashboard():
 @admin_required
 def nuevo_evento():
     if request.method == 'POST':
-        titulo = request.form.get('titulo')
-        descripcion = request.form.get('descripcion')
-        fecha = datetime.strptime(request.form.get('fecha'), '%Y-%m-%dT%H:%M')
-        ubicacion = request.form.get('ubicacion')
-        
-        evento = Evento(
-            titulo=titulo,
-            descripcion=descripcion,
-            fecha=fecha,
-            ubicacion=ubicacion,
-            organizador_id=current_user.id
-        )
-        db.session.add(evento)
-        db.session.commit()
-        
-        flash('Evento creado exitosamente')
-        return redirect(url_for('dashboard'))
+        try:
+            titulo = request.form.get('titulo')
+            descripcion = request.form.get('descripcion')
+            fecha = datetime.strptime(request.form.get('fecha'), '%Y-%m-%dT%H:%M')
+            ubicacion = request.form.get('ubicacion')
+            
+            if not all([titulo, descripcion, fecha, ubicacion]):
+                flash('Todos los campos son requeridos')
+                return render_template('nuevo_evento.html')
+            
+            evento = Evento(
+                titulo=titulo,
+                descripcion=descripcion,
+                fecha=fecha,
+                ubicacion=ubicacion,
+                organizador_id=current_user.id,
+                estado='activo'
+            )
+            db.session.add(evento)
+            db.session.commit()
+            
+            flash('Evento creado exitosamente')
+            return redirect(url_for('dashboard'))
+        except Exception as e:
+            db.session.rollback()
+            flash('Error al crear el evento')
+            return render_template('nuevo_evento.html')
     
     return render_template('nuevo_evento.html')
 
@@ -151,7 +193,7 @@ def nuevo_evento():
 def invitar(evento_id):
     evento = Evento.query.get_or_404(evento_id)
     if evento.organizador_id != current_user.id:
-        flash('No tienes permiso para invitar a este evento')
+        flash('No tienes permiso')
         return redirect(url_for('dashboard'))
     
     if request.method == 'POST':
@@ -200,8 +242,10 @@ def gestionar_invitaciones():
 
 @app.route('/admin/usuarios')
 @login_required
-@admin_required
-def gestionar_usuarios():
+def admin_usuarios():
+    if not current_user.es_admin:
+        flash('Acceso denegado')
+        return redirect(url_for('dashboard'))
     usuarios = Usuario.query.all()
     return render_template('admin/usuarios.html', usuarios=usuarios)
 
@@ -214,7 +258,7 @@ def toggle_admin(usuario_id):
         usuario.es_admin = not usuario.es_admin
         db.session.commit()
         flash(f'Estado de administrador de {usuario.nombre} actualizado')
-    return redirect(url_for('gestionar_usuarios'))
+    return redirect(url_for('admin_usuarios'))
 
 @app.route('/invitacion/<token>')
 def ver_invitacion(token):
@@ -228,11 +272,78 @@ def ver_invitacion(token):
 def gestionar_invitaciones_evento(evento_id):
     evento = Evento.query.get_or_404(evento_id)
     if evento.organizador_id != current_user.id:
-        flash('No tienes permiso para gestionar las invitaciones de este evento.', 'danger')
+        flash('No tienes permiso')
         return redirect(url_for('dashboard'))
     
     invitaciones = Invitacion.query.filter_by(evento_id=evento_id).all()
     return render_template('admin/invitaciones_evento.html', evento=evento, invitaciones=invitaciones)
+
+@app.route('/evento/<int:evento_id>/editar', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def editar_evento(evento_id):
+    evento = Evento.query.get_or_404(evento_id)
+    if evento.organizador_id != current_user.id:
+        flash('No tienes permiso para editar este evento')
+        return redirect(url_for('dashboard'))
+    
+    if request.method == 'POST':
+        evento.titulo = request.form.get('titulo')
+        evento.descripcion = request.form.get('descripcion')
+        evento.fecha = datetime.strptime(request.form.get('fecha'), '%Y-%m-%dT%H:%M')
+        evento.ubicacion = request.form.get('ubicacion')
+        db.session.commit()
+        flash('Evento actualizado exitosamente')
+        return redirect(url_for('dashboard'))
+    
+    return render_template('editar_evento.html', evento=evento)
+
+@app.route('/evento/<int:evento_id>/cancelar', methods=['POST'])
+@login_required
+@admin_required
+def cancelar_evento(evento_id):
+    evento = Evento.query.get_or_404(evento_id)
+    if evento.organizador_id != current_user.id:
+        flash('No tienes permiso para cancelar este evento')
+        return redirect(url_for('dashboard'))
+    
+    evento.estado = 'cancelado'
+    # Cancelar todas las invitaciones asociadas
+    for invitacion in evento.invitaciones:
+        invitacion.estado = 'cancelado'
+    db.session.commit()
+    flash('Evento cancelado exitosamente')
+    return redirect(url_for('dashboard'))
+
+@app.route('/eventos')
+@login_required
+def listar_eventos():
+    if current_user.es_admin:
+        eventos = Evento.query.filter_by(organizador_id=current_user.id).all()
+    else:
+        # Para usuarios normales, mostrar eventos a los que están invitados
+        invitaciones = Invitacion.query.filter_by(usuario_id=current_user.id).all()
+        eventos = [inv.evento for inv in invitaciones]
+    return render_template('eventos/lista.html', eventos=eventos)
+
+@app.route('/eventos/buscar')
+@login_required
+def buscar_eventos():
+    query = request.args.get('q', '')
+    if current_user.es_admin:
+        eventos = Evento.query.filter(
+            Evento.organizador_id == current_user.id,
+            (Evento.titulo.ilike(f'%{query}%') | 
+             Evento.descripcion.ilike(f'%{query}%'))
+        ).all()
+    else:
+        # Para usuarios normales, buscar en eventos a los que están invitados
+        invitaciones = Invitacion.query.filter_by(usuario_id=current_user.id).all()
+        eventos = [inv.evento for inv in invitaciones 
+                  if query.lower() in inv.evento.titulo.lower() or 
+                     query.lower() in inv.evento.descripcion.lower()]
+    
+    return render_template('eventos/busqueda.html', eventos=eventos, query=query)
 
 if __name__ == '__main__':
     with app.app_context():

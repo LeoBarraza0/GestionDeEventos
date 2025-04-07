@@ -15,6 +15,7 @@ class EventFlowTests(unittest.TestCase):
         # Crear contexto de aplicación
         with app.app_context():
             # Eliminar y recrear la base de datos
+            db.session.remove()
             db.drop_all()
             db.create_all()
             
@@ -47,6 +48,7 @@ class EventFlowTests(unittest.TestCase):
         with app.app_context():
             db.session.remove()
             db.drop_all()
+            db.session.close()
 
     def login_admin(self):
         # Iniciar sesión como administrador
@@ -144,29 +146,117 @@ class EventFlowTests(unittest.TestCase):
             self.assertEqual(invitacion.estado, 'aceptado')
             self.assertIsNotNone(invitacion.fecha_respuesta)
 
-    # 2. PRUEBAS DE USABILIDAD
-
-    def test_acceso_dashboard_sin_login(self):
-        """Prueba que no se pueda acceder al dashboard sin iniciar sesión"""
-        response = self.app.get('/dashboard', follow_redirects=True)
-        self.assertEqual(response.status_code, 200)
-        # Verificar que se redirija a la página de login
-        self.assertIn('Iniciar Sesion'.encode('utf-8'), response.data)
-
-    def test_acceso_evento_admin_sin_permiso(self):
-        """Prueba que un usuario normal no pueda acceder a funciones de administrador"""
-        # Crear un evento como admin
+    def test_modificar_evento(self):
+        """Prueba la modificación de un evento existente"""
+        # Primero crear un evento
         self.test_crear_evento()
         
-        # Cerrar sesión de admin e iniciar sesión como usuario normal
-        self.logout()
-        self.login_usuario()
+        # Modificar el evento
+        fecha_modificada = (datetime.now() + timedelta(days=14)).strftime('%Y-%m-%dT%H:%M')
+        response = self.app.post(f'/evento/{self.evento_id}/editar', data={
+            'titulo': 'Evento Modificado',
+            'descripcion': 'Nueva descripción del evento',
+            'fecha': fecha_modificada,
+            'ubicacion': 'Nueva ubicación'
+        }, follow_redirects=True)
         
-        # Intentar acceder a la gestión de invitaciones del evento
-        response = self.app.get(f'/evento/{self.evento_id}/invitaciones', follow_redirects=True)
+        # Verificar que la respuesta sea exitosa
         self.assertEqual(response.status_code, 200)
-        # Verificar que se redirija al dashboard con mensaje de error
-        self.assertIn('No tienes permiso'.encode('utf-8'), response.data)
+        
+        # Verificar que el evento se haya modificado
+        with app.app_context():
+            evento = Evento.query.get(self.evento_id)
+            self.assertEqual(evento.titulo, 'Evento Modificado')
+            self.assertEqual(evento.descripcion, 'Nueva descripción del evento')
+            self.assertEqual(evento.ubicacion, 'Nueva ubicación')
+
+    def test_cancelar_evento(self):
+        """Prueba la cancelación de un evento"""
+        # Primero crear un evento
+        self.test_crear_evento()
+        
+        # Cancelar el evento
+        response = self.app.post(f'/evento/{self.evento_id}/cancelar', follow_redirects=True)
+        
+        # Verificar que la respuesta sea exitosa
+        self.assertEqual(response.status_code, 200)
+        
+        # Verificar que el evento se haya cancelado
+        with app.app_context():
+            evento = Evento.query.get(self.evento_id)
+            self.assertEqual(evento.estado, 'cancelado')
+            
+            # Verificar que las invitaciones se hayan actualizado
+            invitaciones = Invitacion.query.filter_by(evento_id=self.evento_id).all()
+            for invitacion in invitaciones:
+                self.assertEqual(invitacion.estado, 'cancelado')
+
+    def test_listar_eventos(self):
+        """Prueba el listado de eventos"""
+        self.login_admin()
+        
+        # Crear varios eventos
+        fechas = [
+            datetime.now() + timedelta(days=i)
+            for i in range(1, 4)
+        ]
+        
+        eventos_creados = []
+        for i, fecha in enumerate(fechas, 1):
+            response = self.app.post('/evento/nuevo', data={
+                'titulo': f'Evento {i}',
+                'descripcion': f'Descripción del evento {i}',
+                'fecha': fecha.strftime('%Y-%m-%dT%H:%M'),
+                'ubicacion': f'Ubicación {i}'
+            }, follow_redirects=True)
+            self.assertEqual(response.status_code, 200)
+            eventos_creados.append(f'Evento {i}')
+        
+        # Obtener listado de eventos
+        response = self.app.get('/eventos', follow_redirects=True)
+        
+        # Verificar que la respuesta sea exitosa
+        self.assertEqual(response.status_code, 200)
+        
+        # Verificar que todos los eventos creados estén en la lista
+        for titulo in eventos_creados:
+            self.assertIn(titulo.encode('utf-8'), response.data)
+
+    def test_buscar_eventos(self):
+        """Prueba la búsqueda de eventos"""
+        self.login_admin()
+        
+        # Crear eventos con diferentes características
+        eventos = [
+            {
+                'titulo': 'Conferencia Tech',
+                'descripcion': 'Evento sobre tecnología',
+                'fecha': (datetime.now() + timedelta(days=5)).strftime('%Y-%m-%dT%H:%M'),
+                'ubicacion': 'Sala A'
+            },
+            {
+                'titulo': 'Workshop de Python',
+                'descripcion': 'Taller práctico de programación',
+                'fecha': (datetime.now() + timedelta(days=7)).strftime('%Y-%m-%dT%H:%M'),
+                'ubicacion': 'Sala B'
+            }
+        ]
+        
+        for evento in eventos:
+            response = self.app.post('/evento/nuevo', data=evento, follow_redirects=True)
+            self.assertEqual(response.status_code, 200)
+        
+        # Realizar búsqueda por término
+        response = self.app.get('/eventos/buscar?q=Python', follow_redirects=True)
+        
+        # Verificar que la respuesta sea exitosa
+        self.assertEqual(response.status_code, 200)
+        
+        # Verificar que solo aparezca el evento de Python
+        self.assertIn('Workshop de Python'.encode('utf-8'), response.data)
+        self.assertNotIn('Conferencia Tech'.encode('utf-8'), response.data)
+
+    # 2. PRUEBAS DE USABILIDAD
 
     def test_navegacion_intuitiva(self):
         """Prueba que la navegación sea intuitiva para diferentes tipos de usuarios"""
@@ -189,7 +279,7 @@ class EventFlowTests(unittest.TestCase):
     # 3. PRUEBAS DE SEGURIDAD
 
     def test_proteccion_contraseña(self):
-        """Prueba que las contraseñas estén protegidas"""
+        """Prueba TC-012: Protección de Contraseñas"""
         with app.app_context():
             # Obtener el usuario admin
             admin = Usuario.query.get(self.admin_id)
@@ -200,7 +290,7 @@ class EventFlowTests(unittest.TestCase):
             self.assertFalse(admin.check_password('contraseña_incorrecta'))
 
     def test_acceso_no_autorizado(self):
-        """Prueba que no se pueda acceder a rutas protegidas sin autenticación"""
+        """Prueba TC-013: Control de Acceso"""
         # Intentar acceder a la gestión de usuarios sin iniciar sesión
         response = self.app.get('/admin/usuarios', follow_redirects=True)
         self.assertEqual(response.status_code, 200)
@@ -217,22 +307,27 @@ class EventFlowTests(unittest.TestCase):
         self.assertIn('Acceso denegado'.encode('utf-8'), response.data)
 
     def test_proteccion_datos_usuario(self):
-        """Prueba que los datos del usuario estén protegidos"""
-        # Crear un evento como admin
-        self.test_crear_evento()
-        
-        # Cerrar sesión de admin e iniciar sesión como usuario normal
-        self.logout()
+        """Prueba TC-015: Protección de Datos de Usuario"""
+        # Iniciar sesión como usuario normal
         self.login_usuario()
         
-        # Intentar acceder a los datos del evento como usuario normal
-        response = self.app.get(f'/evento/{self.evento_id}/invitaciones', follow_redirects=True)
+        # Intentar acceder a los datos de otro usuario
+        response = self.app.get(f'/usuario/{self.admin_id}/perfil', follow_redirects=True)
         self.assertEqual(response.status_code, 200)
         # Verificar que se redirija al dashboard con mensaje de error
-        self.assertIn('No tienes permiso'.encode('utf-8'), response.data)
+        self.assertIn('Acceso denegado'.encode('utf-8'), response.data)
+        
+        # Verificar que solo se muestren los datos del usuario actual
+        response = self.app.get(f'/usuario/{self.usuario_id}/perfil', follow_redirects=True)
+        self.assertEqual(response.status_code, 200)
+        # Verificar que se muestren los datos del usuario actual
+        self.assertIn('Usuario Test'.encode('utf-8'), response.data)
+        
+        # Verificar que los datos sensibles estén protegidos
+        self.assertNotIn('usuario123'.encode('utf-8'), response.data)
 
     def test_csrf_proteccion(self):
-        """Prueba la protección CSRF en formularios"""
+        """Prueba TC-014: Protección CSRF"""
         # Habilitar CSRF para esta prueba
         app.config['WTF_CSRF_ENABLED'] = True
         

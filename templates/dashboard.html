@@ -11,7 +11,7 @@
         <a href="{{ url_for('gestionar_invitaciones') }}" class="btn btn-info me-2">
             <i class="bi bi-envelope me-1"></i>Gestionar Invitaciones
         </a>
-        <a href="{{ url_for('gestionar_usuarios') }}" class="btn btn-warning">
+        <a href="{{ url_for('admin_usuarios') }}" class="btn btn-warning">
             <i class="bi bi-people me-1"></i>Gestionar Usuarios
         </a>
     </div>
@@ -22,6 +22,18 @@
         </a>
     </div>
     {% endif %}
+</div>
+
+<!-- Barra de búsqueda -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <form action="{{ url_for('buscar_eventos') }}" method="GET" class="d-flex">
+            <input type="text" name="q" class="form-control me-2" placeholder="Buscar eventos...">
+            <button type="submit" class="btn btn-outline-primary">
+                <i class="bi bi-search"></i>
+            </button>
+        </form>
+    </div>
 </div>
 
 <div class="row">
@@ -39,11 +51,29 @@
                         <ul class="list-unstyled">
                             <li><i class="bi bi-calendar-event me-2"></i><strong>Fecha:</strong> {{ evento.fecha.strftime('%d/%m/%Y %H:%M') }}</li>
                             <li><i class="bi bi-geo-alt me-2"></i><strong>Ubicación:</strong> {{ evento.ubicacion }}</li>
+                            <li><i class="bi bi-circle-fill me-2"></i><strong>Estado:</strong> 
+                                <span class="badge {% if evento.estado == 'activo' %}bg-success{% else %}bg-danger{% endif %}">
+                                    {{ evento.estado|title }}
+                                </span>
+                            </li>
                         </ul>
                         <div class="d-grid gap-2">
                             <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#evento{{ evento.id }}">
                                 <i class="bi bi-chevron-down me-1"></i>Ver más
                             </button>
+                            <div class="btn-group">
+                                <a href="{{ url_for('editar_evento', evento_id=evento.id) }}" class="btn btn-warning">
+                                    <i class="bi bi-pencil me-1"></i>Editar
+                                </a>
+                                {% if evento.estado == 'activo' %}
+                                <form action="{{ url_for('cancelar_evento', evento_id=evento.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                    <button type="submit" class="btn btn-danger" onclick="return confirm('¿Estás seguro de que deseas cancelar este evento?')">
+                                        <i class="bi bi-x-circle me-1"></i>Cancelar
+                                    </button>
+                                </form>
+                                {% endif %}
+                            </div>
                             <a href="{{ url_for('gestionar_invitaciones_evento', evento_id=evento.id) }}" class="btn btn-primary">
                                 <i class="bi bi-envelope me-1"></i>Gestionar Invitaciones
                             </a>
@@ -86,12 +116,14 @@
                 {% if invitacion.estado == 'pendiente' %}
                 <div class="mt-2">
                     <form action="{{ url_for('responder_invitacion', invitacion_id=invitacion.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="respuesta" value="aceptado">
                         <button type="submit" class="btn btn-success btn-sm">
                             <i class="bi bi-check-circle me-1"></i>Aceptar
                         </button>
                     </form>
                     <form action="{{ url_for('responder_invitacion', invitacion_id=invitacion.id) }}" method="POST" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <input type="hidden" name="respuesta" value="rechazado">
                         <button type="submit" class="btn btn-danger btn-sm">
                             <i class="bi bi-x-circle me-1"></i>Rechazar

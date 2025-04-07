@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <h2><i class="bi bi-search me-2"></i>Resultados de búsqueda</h2>
+            <p class="text-muted">Búsqueda: "{{ query }}"</p>
+        </div>
+        <div class="col-md-4">
+            <form action="{{ url_for('buscar_eventos') }}" method="GET" class="d-flex">
+                <input type="text" name="q" class="form-control me-2" value="{{ query }}" placeholder="Buscar eventos...">
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="bi bi-search"></i>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    {% if eventos %}
+    <div class="row">
+        {% for evento in eventos %}
+        <div class="col-md-6 mb-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h5 class="card-title">{{ evento.titulo }}</h5>
+                    <p class="card-text text-muted">{{ evento.descripcion[:100] }}{% if evento.descripcion|length > 100 %}...{% endif %}</p>
+                    <ul class="list-unstyled">
+                        <li><i class="bi bi-calendar-event me-2"></i><strong>Fecha:</strong> {{ evento.fecha.strftime('%d/%m/%Y %H:%M') }}</li>
+                        <li><i class="bi bi-geo-alt me-2"></i><strong>Ubicación:</strong> {{ evento.ubicacion }}</li>
+                        <li><i class="bi bi-circle-fill me-2"></i><strong>Estado:</strong> 
+                            <span class="badge {% if evento.estado == 'activo' %}bg-success{% else %}bg-danger{% endif %}">
+                                {{ evento.estado|title }}
+                            </span>
+                        </li>
+                    </ul>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#evento{{ evento.id }}">
+                            <i class="bi bi-chevron-down me-1"></i>Ver más
+                        </button>
+                        {% if current_user.es_admin and evento.organizador_id == current_user.id %}
+                        <div class="btn-group">
+                            <a href="{{ url_for('editar_evento', evento_id=evento.id) }}" class="btn btn-warning">
+                                <i class="bi bi-pencil me-1"></i>Editar
+                            </a>
+                            {% if evento.estado == 'activo' %}
+                            <form action="{{ url_for('cancelar_evento', evento_id=evento.id) }}" method="POST" class="d-inline">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                                <button type="submit" class="btn btn-danger" onclick="return confirm('¿Estás seguro de que deseas cancelar este evento?')">
+                                    <i class="bi bi-x-circle me-1"></i>Cancelar
+                                </button>
+                            </form>
+                            {% endif %}
+                        </div>
+                        <a href="{{ url_for('gestionar_invitaciones_evento', evento_id=evento.id) }}" class="btn btn-primary">
+                            <i class="bi bi-envelope me-1"></i>Gestionar Invitaciones
+                        </a>
+                        {% endif %}
+                    </div>
+                    <div class="collapse mt-3" id="evento{{ evento.id }}">
+                        <div class="card card-body bg-light">
+                            <h6 class="mb-3">Detalles completos del evento</h6>
+                            <p class="mb-2"><strong>Descripción completa:</strong></p>
+                            <p class="mb-3">{{ evento.descripcion }}</p>
+                            <p class="mb-2"><strong>Organizador:</strong> {{ evento.organizador.nombre }}</p>
+                            <p class="mb-0"><strong>Fecha del evento:</strong> {{ evento.fecha.strftime('%d/%m/%Y %H:%M') }}</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle me-2"></i>No se encontraron eventos que coincidan con tu búsqueda.
+    </div>
+    {% endif %}
+
+    <div class="mt-4">
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left me-1"></i>Volver al Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %} 

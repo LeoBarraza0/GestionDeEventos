@@ -36,6 +36,7 @@
                             <td>
                                 {% if usuario.id != current_user.id %}
                                 <form action="{{ url_for('toggle_admin', usuario_id=usuario.id) }}" method="POST" class="d-inline">
+                                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-sm {% if usuario.es_admin %}btn-warning{% else %}btn-success{% endif %}">
                                         {% if usuario.es_admin %}Quitar Admin{% else %}Hacer Admin{% endif %}
                                     </button>
